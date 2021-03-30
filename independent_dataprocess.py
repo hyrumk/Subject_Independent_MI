@@ -121,22 +121,25 @@ def generate_ss_feature(dataset, num_selected_bands=20):
         list_X = [subj_data[0] for subj_data in list_XY]
         list_Y = [subj_data[1] for subj_data in list_XY]
 
+        #<TODO> possible necessary change in X shape currently (data #, channel, time point) -> (data #, time point, channel)
         X = np.concatenate(list_X)  # concatenated X from all the subjects bandpass filtered by current filter range
         Y = np.concatenate(list_Y)  # concatenated X from all the subjects bandpass filtered by current filter range
 
-        N_COMPONENTS = np.unique(Y) if N_COMPONENTS == 0 else N_COMPONENTS
+
+        N_COMPONENTS = len(np.unique(Y)) if N_COMPONENTS == 0 else N_COMPONENTS
         csp = CSP(n_components=N_COMPONENTS, reg=None, log=True, norm_trace=False)
         csp_fit = csp.fit_transform(X, Y)
 
+        # <TODO> MIGHT NEED TO COMPUTE MUTUAL INFO ON OUR OWN
         covs, sample_weights = csp._compute_covariance_matrices(X, Y)
         eigen_vectors, eigen_values = csp._decompose_covs(covs,
                                                           sample_weights)
         ix = csp._order_components(covs, sample_weights, eigen_vectors,
                                    eigen_values, csp.component_order)
 
-        eigen_vectors = eigen_vectors[:, ix]
+        #eigen_vectors = eigen_vectors[:, ix]
 
-        csp.filters_ = eigen_vectors.T  # filter W
+        filter_W = csp.filters_ # = eigen_vectors.T, filter W
 
 
         filtered_dataset.append(kth_filtered)
