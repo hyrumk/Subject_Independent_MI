@@ -1,5 +1,7 @@
 import numpy as np
 
+#<TODO> Fix functions
+
 #entropy
 def entropy(X):
     '''
@@ -30,6 +32,6 @@ def cEntropy(Y, X):
     """
     return jEntropy(Y, X) - entropy(X)
 
-a = np.random.rand(5,5)
-b = np.random.rand(5,5)
-print(cEntropy(a, a))
+a = np.array([1,2,3,0])
+b = np.array([3,4,1,5])
+print(jEntropy(a, b))

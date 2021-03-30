@@ -3,7 +3,9 @@ from braindecode.datautil.preprocess import exponential_moving_standardize
 from braindecode.datautil.preprocess import MNEPreproc, NumpyPreproc, preprocess
 import copy
 import numpy as np
+from mne.decoding import CSP
 from braindecode.datautil.windowers import create_windows_from_events
+import mne
 
 frequency_bands = [(7.5,14),(11,13),(10,14),(9,12),(19,22),(16,22),(26,34),(17.5,20.5),(7,30),
                    (5,14),(11,31),(12,18),(7,9),(15,17),(25,30),(20,25),(5,10),(10,25),(15,30),
@@ -28,7 +30,7 @@ def bandpass_data(datasets, filter_range):
 
     :param datasets: (list) a list of MOABBDatasets by subject
     :param filter_range: tuple (low_cut, high_cut)
-    :return: (list) a list of bandpass filtered subject data
+    :return: (list) (BaseConcatDataset) a list of bandpass filtered subject data
     '''
     low_cut_hz = filter_range[0]  # low cut frequency for filtering
     high_cut_hz = filter_range[1]  # high cut frequency for filtering
@@ -75,30 +77,71 @@ def bandpass_data(datasets, filter_range):
 
     return filtered_ds
 
+def windows_to_XY(windows_dataset):
+    '''
+    Convert windows_dataset suitable to MNE by converting into numpy
 
-def generate_ss_feature(dataset, num_channels, num_selected_bands=20):
+    :param windows_dataset: (windows_dataset) from one element of returned data of bandpass_data
+    :return: (numpy, numpy) X, Y
+    '''
+    Y = np.array([])
+    for i, (x, y, window_ind) in enumerate(windows_dataset):
+        if i == 0:
+            X = np.array([x])
+            Y = np.append(Y, y)
+        else:
+            X = np.concatenate([X, [x]])
+            Y = np.append(Y, y)
+
+    X = np.float64(X)
+    Y = np.int64(Y)
+
+    return X,Y
+
+
+def generate_ss_feature(dataset, num_selected_bands=20):
+    '''
+
+    :param dataset: (list) a list of MOABBDatasets by subject (directly from call_data return)
+    :param num_channels:
+    :param num_selected_bands:
+    :return:
+    '''
     filtered_dataset = []
-    num_trials = num_subjects = 0
+    num_trials = num_subjects = N_COMPONENTS = 0
 
     for k,filter_range in enumerate(frequency_bands):
-        Vk = np.array([])
         kth_filtered = bandpass_data(dataset, filter_range) # [window_subj1, window_subj2 ... window_subjN]
                                                             # Each window_subj1 consisted of (x,y,window_ind) by trial
         num_trials =  len(kth_filtered[0])# trial/subject
         num_subjects = len(kth_filtered)
+        #num_channels =
+
+        list_XY = [windows_to_XY(subj_windows) for subj_windows in kth_filtered]
+        list_X = [subj_data[0] for subj_data in list_XY]
+        list_Y = [subj_data[1] for subj_data in list_XY]
+
+        X = np.concatenate(list_X)  # concatenated X from all the subjects bandpass filtered by current filter range
+        Y = np.concatenate(list_Y)  # concatenated X from all the subjects bandpass filtered by current filter range
+
+        N_COMPONENTS = np.unique(Y) if N_COMPONENTS == 0 else N_COMPONENTS
+        csp = CSP(n_components=N_COMPONENTS, reg=None, log=True, norm_trace=False)
+        csp_fit = csp.fit_transform(X, Y)
+
+        covs, sample_weights = csp._compute_covariance_matrices(X, Y)
+        eigen_vectors, eigen_values = csp._decompose_covs(covs,
+                                                          sample_weights)
+        ix = csp._order_components(covs, sample_weights, eigen_vectors,
+                                   eigen_values, csp.component_order)
+
+        eigen_vectors = eigen_vectors[:, ix]
+
+        csp.filters_ = eigen_vectors.T  # filter W
+
 
         filtered_dataset.append(kth_filtered)
 
-        #<TODO> finish CSP ALGORITHM
-        # solve (Wk)^T*(sig(+) + sig(-))*Wk = I
-        # Wk_car # the first u and the last u column vectors in Wk
-        Wk_car = np.array()
-        #<TODO> Check dimension once finished. Check axis in concatenate
-        for subject in kth_filtered:
-            for i, (x,y,window_ind) in enumerate(subject):
-                np.concatenate(Vk, np.log(Wk_car.T @ x), axis=0)  # x = a single trial
-
-        #<TODO> Compute MI value from Vk and append later.
+        #<TODO>
 
 
 
