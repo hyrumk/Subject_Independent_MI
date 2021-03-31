@@ -2,36 +2,22 @@ import numpy as np
 
 #<TODO> Fix functions
 
-#entropy
-def entropy(X):
-    '''
 
-    :param X: (numpy) Input
-    :return: (numpy) Entropy of the input
-    '''
-    unique, count = np.unique(X, return_counts=True, axis=0)
-    prob = count/len(X)
-    en = np.sum((-1)*prob*np.log2(prob))
-    return en
-
-#Joint Entropy
-def jEntropy(Y,X):
-    """
-    H(Y;X)
-    Reference: https://en.wikipedia.org/wiki/Joint_entropy
-    """
-    YX = np.c_[Y,X]
-    return entropy(YX)
-
-#Conditional Entropy
-def cEntropy(Y, X):
-    """
-    conditional entropy = Joint Entropy - Entropy of X
-    H(Y|X) = H(Y;X) - H(X)
-    Reference: https://en.wikipedia.org/wiki/Conditional_entropy
-    """
-    return jEntropy(Y, X) - entropy(X)
-
-a = np.array([1,2,3,0])
-b = np.array([3,4,1,5])
-print(jEntropy(a, b))
+#mutual information
+# from https://stackoverflow.com/questions/24686374/pythons-implementation-of-mutual-information
+def computeMI(x, y):
+    sum_mi = 0.0
+    x_value_list = np.unique(x)
+    y_value_list = np.unique(y)
+    Px = np.array([ len(x[x==xval])/float(len(x)) for xval in x_value_list ]) #P(x)
+    Py = np.array([ len(y[y==yval])/float(len(y)) for yval in y_value_list ]) #P(y)
+    for i in range(len(x_value_list)):
+        if Px[i] ==0.:
+            continue
+        sy = y[x == x_value_list[i]]
+        if len(sy)== 0:
+            continue
+        pxy = np.array([len(sy[sy==yval])/float(len(y))  for yval in y_value_list]) #p(x,y)
+        t = pxy[Py>0.]/Py[Py>0.] /Px[i] # log(P(x,y)/( P(x)*P(y))
+        sum_mi += sum(pxy[t>0]*np.log2( t[t>0]) ) # sum ( P(x,y)* log(P(x,y)/( P(x)*P(y)) )
+    return sum_mi
