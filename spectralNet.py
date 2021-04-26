@@ -26,30 +26,33 @@ class SpectralNet(nn.Module):
 
         self.deep_cnn_list = [
             nn.Sequential(
-                nn.Conv2d(1, 10, kernel_size=3, padding=1),
+                nn.Conv2d(1, 10, kernel_size=3, padding=4),
                 nn.ReLU(),
+                nn.Dropout(0.5),
                 nn.Conv2d(10, 14, kernel_size=3, padding=1),
                 nn.ReLU(),
+                nn.Dropout(0.5),
                 nn.Conv2d(14, 18, kernel_size=3, padding=1),
                 nn.ReLU(),
+                nn.Dropout(0.5),
                 nn.Flatten(),
                 nn.Linear(28 * 28 * 18, 256)
             )
         ]
 
         self.features = nn.ModuleList([nn.Sequential(
-            nn.Conv2d(1,10, kernel_size = 3, padding = 1),
+            nn.Conv2d(1,10, kernel_size = 3, padding = 4),
             nn.ReLU(),
             nn.Conv2d(10, 14, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(14, 18, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(28*28*18, 256)
+            nn.Linear(26*26*18, 256)
         ) for _ in range(20)])
         self.fc_module = nn.Sequential(
             nn.Linear(256*n_selected, cnn_output_dim),
-            nn.Softmax(dim=n_classes)
+            nn.Softmax(dim=0)
         )
 
     def forward(self, input_list):
@@ -59,7 +62,7 @@ class SpectralNet(nn.Module):
         :return:
         '''
         #print("INPUT: ", input_list.shape)
-        concat_fusion = cat([cnn(x) for x,cnn in zip(input_list,self.features)], dim = 0)
+        concat_fusion = cat([cnn(x) for x,cnn in zip(input_list,self.features)], dim = 1)
         output = self.fc_module(concat_fusion)
         return output
 
@@ -68,7 +71,7 @@ class SpectralNet(nn.Module):
 #def spectral_input_to_dataloader():
 
 def numpy_to_trainloader(X,Y, batch_size, num_workers = 4):
-    tensor_x = torch.from_numpy(X)
+    tensor_x = torch.FloatTensor(X)
     tensor_y = torch.Tensor(Y)
     dataset = TensorDataset(tensor_x, tensor_y)
     train_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True,
@@ -80,27 +83,32 @@ def numpy_to_trainloader(X,Y, batch_size, num_workers = 4):
 def train(epochs, train_loader, model, optimizer, batch_size = 100):
 
     use_cuda = torch.cuda.is_available()
-    print(use_cuda)
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    model.to(device)
     for epoch in range(epochs):
         running_loss = 0.0
         for batch, data in enumerate(train_loader,0):
             inputs, labels = data
+
+            inputs = inputs.to(device)
+            labels = labels.to(device=device, dtype=torch.int64)
             # splits the tensor suitable for model input
             model_input = torch.split(inputs, 1, dim=1)
+
             # convert to list
             model_input = list(model_input)
-            if use_cuda:
-                inputs = inputs.cuda()
-                labels = labels.cuda()
             optimizer.zero_grad()
 
             outputs = model(model_input)
-            loss = F.nll_loss(outputs, labels)
+            #outputs = torch.LongTensor(outputs.to('cpu'))
+            # LOSS FUNCTION
+            loss_function = nn.CrossEntropyLoss().to(device)
+            loss = loss_function(outputs, labels)
             loss.backward()
             optimizer.step()
             if batch % 100 == 0:
                 print('[%d, %5d] loss: %.3f' %
-                      (epoch + 1, batch + 1, running_loss / 2000))
+                      (epoch + 1, batch + 1, loss.item()))
                 running_loss = 0.0
     print("Finished Training")
     '''
@@ -120,9 +128,9 @@ def train(epochs, train_loader, model, optimizer, batch_size = 100):
                 100. * batch_idx / len(train_loader), loss.item()))
     '''
 
-def train_and_test(train_loader, epoch, test_loader):
+def train_and_test(train_loader, epoch, test_loader, num_channel = 20):
     use_cuda = torch.cuda.is_available()
-    model = SpectralNet(20).cuda() if use_cuda else SpectralNet(20)
+    model = SpectralNet(num_channel).cuda() if use_cuda else SpectralNet(num_channel)
     optimizer = optim.Adam(model.parameters(), lr=0.00001)
 
     train(epoch, train_loader, model, optimizer)
@@ -134,4 +142,4 @@ def train_and_test(train_loader, epoch, test_loader):
 #summary(SpectralNet, (28,28,20))
 model = SpectralNet(20).cuda()
 model1 = SpectralNet(20)
-print(model1)
+#print(model1)
