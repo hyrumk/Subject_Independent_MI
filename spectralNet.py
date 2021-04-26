@@ -11,7 +11,7 @@ from braindecode.models.modules import Expression, Ensure4d
 from braindecode.models.functions import (
     safe_log, square, transpose_time_to_spat, squeeze_final_output
 )
-from torchsummary import summary
+#from torchsummary import summary
 
 
 class SpectralNet(nn.Module):
@@ -35,9 +35,9 @@ class SpectralNet(nn.Module):
                 nn.Flatten(),
                 nn.Linear(28 * 28 * 18, 256)
             )
-        ]*20
+        ]
 
-        self.features = nn.Sequential(
+        self.features = nn.ModuleList([nn.Sequential(
             nn.Conv2d(1,10, kernel_size = 3, padding = 1),
             nn.ReLU(),
             nn.Conv2d(10, 14, kernel_size=3, padding=1),
@@ -46,7 +46,7 @@ class SpectralNet(nn.Module):
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(28*28*18, 256)
-        )
+        ) for _ in range(20)])
         self.fc_module = nn.Sequential(
             nn.Linear(256*n_selected, cnn_output_dim),
             nn.Softmax(dim=n_classes)
@@ -58,7 +58,7 @@ class SpectralNet(nn.Module):
         :param input_list: (list[Tensor]) a list of spectral input tensors
         :return:
         '''
-
+        #print("INPUT: ", input_list.shape)
         concat_fusion = cat([cnn(x) for x,cnn in zip(input_list,self.features)], dim = 0)
         output = self.fc_module(concat_fusion)
         return output
@@ -68,18 +68,42 @@ class SpectralNet(nn.Module):
 #def spectral_input_to_dataloader():
 
 def numpy_to_trainloader(X,Y, batch_size, num_workers = 4):
-    tensor_x = torch.Tensor(X)
+    tensor_x = torch.from_numpy(X)
     tensor_y = torch.Tensor(Y)
     dataset = TensorDataset(tensor_x, tensor_y)
     train_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True,
                                                num_workers=num_workers)
+    return train_loader
 
 
 
-def train(epoch, train_loader, model, optimizer, batch_size = 100):
+def train(epochs, train_loader, model, optimizer, batch_size = 100):
 
     use_cuda = torch.cuda.is_available()
+    print(use_cuda)
+    for epoch in range(epochs):
+        running_loss = 0.0
+        for batch, data in enumerate(train_loader,0):
+            inputs, labels = data
+            # splits the tensor suitable for model input
+            model_input = torch.split(inputs, 1, dim=1)
+            # convert to list
+            model_input = list(model_input)
+            if use_cuda:
+                inputs = inputs.cuda()
+                labels = labels.cuda()
+            optimizer.zero_grad()
 
+            outputs = model(model_input)
+            loss = F.nll_loss(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            if batch % 100 == 0:
+                print('[%d, %5d] loss: %.3f' %
+                      (epoch + 1, batch + 1, running_loss / 2000))
+                running_loss = 0.0
+    print("Finished Training")
+    '''
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
         if use_cuda:
@@ -92,8 +116,9 @@ def train(epoch, train_loader, model, optimizer, batch_size = 100):
         optimizer.step() # update gradients
         if batch_idx % 100 == 0: # print train loss per every 100 batch_idx.
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, batch_idx * len(data), len(train_loader.dataset),
+                epochs, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
+    '''
 
 def train_and_test(train_loader, epoch, test_loader):
     use_cuda = torch.cuda.is_available()

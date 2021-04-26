@@ -133,7 +133,7 @@ def generate_ss_feature(dataset, num_selected_bands=20):
         X = np.concatenate(list_X)  # concatenated X from all the subjects bandpass filtered by current filter range
         Y = np.concatenate(list_Y)  # concatenated X from all the subjects bandpass filtered by current filter range
 
-        print("X first: ", X[0])
+        #print("X first: ", X[0])
 
         N_COMPONENTS = len(np.unique(Y)) if N_COMPONENTS == 0 else N_COMPONENTS
         csp = CSP(n_components=N_COMPONENTS, reg=None, log=True, norm_trace=False)
@@ -155,21 +155,22 @@ def generate_ss_feature(dataset, num_selected_bands=20):
         filtered_dataset.append((mutual_info, (X,Y), Wk, filter_range, Vk))
 
     #<TODO> sort filtered_dataset by mutual_info in descending order
-    filtered_dataset.sort() # sort by mutual_info.
+    filtered_dataset.sort(key=lambda tup: tup[0]) # sort by mutual_info.
+
     C_list = []
-    Y = filtered_dataset[0][1][2]
+    Y = filtered_dataset[0][1][1]
     for tup in filtered_dataset[:num_selected_bands]:
         X = tup[1][0]
         Wk = tup[2]
-
         C = []
         for x in X:
             mult = Wk.T @ x
             cip = np.cov(mult)
-            C.append(torch.Tensor(cip))
+            C.append(cip) #torch.Tensor(cip)
         #C = np.concatenate(C)
         C_list.append(C)
     # C_list will contain 20 different list (C1~C20) which includes spectral spatial inputs of each of 20 frequency ranges
+    # C_list = list(20*list(spectral spatial inputs for each trial))
     input_list = [list(i) for i in zip(*C_list)]
 
     frequency_range_order = [tup[3] for tup in filtered_dataset]
@@ -233,7 +234,7 @@ def generate_ss_feature_test(dataset, frequency_range_order):
 
 
 
-
+'''
 DATASET_NAME = "BNCI2014001"
 data = call_data(DATASET_NAME, [1,2])#[i for i in range(1,10)])
 X, Y, frequency_order  = generate_ss_feature(data)
@@ -243,6 +244,7 @@ print(len(X))
 print(len(X[0])) # should be 20
 print(X[0][0].shape) # spectral input
 print(Y.shape)
+'''
 #print("mutual info list:  ",[tup[0] for tup in filt_dataset])
 #print("X,Y shape list: ", [(tup[1][0].shape, tup[1][1].shape) for tup in filt_dataset])
 #print("X list: ", [tup[1][0][0] for tup in filt_dataset])
