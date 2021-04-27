@@ -19,40 +19,24 @@ class SpectralNet(nn.Module):
         self,
         n_selected, # number of selected bands
         #in_chans,
+        output_dim = 4,
         n_classes = 2,
-        cnn_output_dim = 1024
     ):
         super(SpectralNet, self).__init__()
-
-        self.deep_cnn_list = [
-            nn.Sequential(
-                nn.Conv2d(1, 10, kernel_size=3, padding=4),
-                nn.ReLU(),
-                nn.Dropout(0.5),
-                nn.Conv2d(10, 14, kernel_size=3, padding=1),
-                nn.ReLU(),
-                nn.Dropout(0.5),
-                nn.Conv2d(14, 18, kernel_size=3, padding=1),
-                nn.ReLU(),
-                nn.Dropout(0.5),
-                nn.Flatten(),
-                nn.Linear(28 * 28 * 18, 256)
-            )
-        ]
-
         self.features = nn.ModuleList([nn.Sequential(
-            nn.Conv2d(1,10, kernel_size = 3, padding = 4),
+            nn.Conv2d(1,10, kernel_size = 3, padding = 5),
             nn.ReLU(),
             nn.Conv2d(10, 14, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(14, 18, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(26*26*18, 256)
+            nn.Linear(28*28*18, 256)
         ) for _ in range(20)])
         self.fc_module = nn.Sequential(
-            nn.Linear(256*n_selected, cnn_output_dim),
-            nn.Softmax(dim=0)
+            nn.Linear(256*n_selected, 1024),
+            nn.Linear(1024, output_dim),
+            nn.Softmax(dim=1)
         )
 
     def forward(self, input_list):
@@ -70,17 +54,17 @@ class SpectralNet(nn.Module):
 
 #def spectral_input_to_dataloader():
 
-def numpy_to_trainloader(X,Y, batch_size, num_workers = 4):
+def numpy_to_trainloader(X,Y, batch_size, num_workers = 4, shuffle = True):
     tensor_x = torch.FloatTensor(X)
     tensor_y = torch.Tensor(Y)
     dataset = TensorDataset(tensor_x, tensor_y)
-    train_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True,
+    train_loader = DataLoader(dataset=dataset, batch_size=batch_size, shuffle=shuffle,
                                                num_workers=num_workers)
     return train_loader
 
 
 
-def train(epochs, train_loader, model, optimizer, batch_size = 100):
+def train(epochs, train_loader, model, optimizer, loss_function, PATH = './independent_model.pth'):
 
     use_cuda = torch.cuda.is_available()
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -88,6 +72,9 @@ def train(epochs, train_loader, model, optimizer, batch_size = 100):
     for epoch in range(epochs):
         running_loss = 0.0
         for batch, data in enumerate(train_loader,0):
+            #<TODO> Delete this after using
+            print("Current batch: ", batch)
+
             inputs, labels = data
 
             inputs = inputs.to(device)
@@ -99,41 +86,58 @@ def train(epochs, train_loader, model, optimizer, batch_size = 100):
             model_input = list(model_input)
             optimizer.zero_grad()
 
-            outputs = model(model_input)
             #outputs = torch.LongTensor(outputs.to('cpu'))
             # LOSS FUNCTION
-            loss_function = nn.CrossEntropyLoss().to(device)
+            outputs = model(model_input)
             loss = loss_function(outputs, labels)
             loss.backward()
             optimizer.step()
+
+            running_loss += loss.item()
+            print("LOSS ITEM: ", loss.item())
             if batch % 100 == 0:
                 print('[%d, %5d] loss: %.3f' %
-                      (epoch + 1, batch + 1, loss.item()))
+                      (epoch + 1, batch + 1, running_loss/100))
+                print(outputs.shape)
+                print(outputs)
+                print(torch.sum(torch.sum(outputs, dim=1)))
+                print(labels)
                 running_loss = 0.0
     print("Finished Training")
-    '''
-    model.train()
-    for batch_idx, (data, target) in enumerate(train_loader):
-        if use_cuda:
-            data = data.cuda()
-            target = target.cuda()
-        optimizer.zero_grad() # set the gradients to zero before starting backpropragation
-        output = model(data) # model prediction
-        loss = F.nll_loss(output, target) # calculate negative log likelihood
-        loss.backward() # calculate gradients
-        optimizer.step() # update gradients
-        if batch_idx % 100 == 0: # print train loss per every 100 batch_idx.
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epochs, batch_idx * len(data), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), loss.item()))
-    '''
+    torch.save(model.state_dict(),PATH)
 
-def train_and_test(train_loader, epoch, test_loader, num_channel = 20):
+    return model
+
+
+def train_and_test(train_loader, epoch, test_loader, num_channel = 20, PATH = './independent_model.pth'):
     use_cuda = torch.cuda.is_available()
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
     model = SpectralNet(num_channel).cuda() if use_cuda else SpectralNet(num_channel)
     optimizer = optim.Adam(model.parameters(), lr=0.00001)
+    loss_function = nn.CrossEntropyLoss().to(device)
 
-    train(epoch, train_loader, model, optimizer)
+    trained_model = train(epoch, train_loader, model, optimizer, loss_function, PATH)
+    test_model = SpectralNet(20)
+    test_model.load_state_dict(torch.load(PATH))
+    test_model.eval()
+
+    correct = 0
+    total = 0
+    class_total = list(0. for i in range(4))
+    class_correct = list(0. for i in range(4))
+    with torch.no_grad():
+        for data in test_loader:
+            inputs, labels = data
+
+            inputs = inputs.to(device)
+            labels = labels.to(device=device, dtype=torch.int64)
+            # splits the tensor suitable for model input
+            model_input = torch.split(inputs, 1, dim=1)
+
+            outputs = test_model(model_input)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
 
 # <TODO> finish train, train_and_test, numpy_to_trainloader
 
@@ -142,4 +146,4 @@ def train_and_test(train_loader, epoch, test_loader, num_channel = 20):
 #summary(SpectralNet, (28,28,20))
 model = SpectralNet(20).cuda()
 model1 = SpectralNet(20)
-#print(model1)
+print(model1)

@@ -33,16 +33,36 @@ if __name__ == '__main__':
     with open('data_Y.pkl', 'wb') as f:
         pickle.dump(Y, f)
     '''
+    data = []
+    for i in range(8):
+        with open('data/braindecode2a_data{}.pkl'.format(i), 'rb') as f:
+            subject_data = pickle.load(f)
+            data.append(subject_data)
+
+    X, Y, frequency_order = generate_ss_feature(data)
+    with open('data_X.pkl','wb') as f:
+        pickle.dump(X, f)
+    with open('data_Y.pkl', 'wb') as f:
+        pickle.dump(Y, f)
+    with open('data_freq_order.pkl','wb') as f:
+        pickle.dump(frequency_order, f)
+    # X_train, Y_train, frequency_order = generate_ss_feature(data[:-1])
+    # X_test, Y_test = generate_ss_feature_test(data[-1], frequency_order)
+    Xn = np.array(X)
+    print(Y)
+    trainloader = sn.numpy_to_trainloader(Xn,Y,100)
+    #testloader = sn.numpy_to_trainloader(X_test, Y_test, 100, shuffle = False)
+    sn.train_and_test(trainloader, 50, 0)
+
+'''
+    This brings pickled data (from generate_ss_feature)
     with open('data_X.pkl', 'rb') as f:
         X = pickle.load(f)
     with open('data_Y.pkl', 'rb') as f:
         Y = pickle.load(f)
-    Xn = np.array(X)
-    print(Y)
-    trainloader = sn.numpy_to_trainloader(Xn,Y,100)
-    sn.train_and_test(trainloader, 50, 0)
 
-'''
+
+
     #run_sample_model(subject_data, dataset_name=DATASET_NAME, file_name="2a subject {} temp".format(str(i + 1)), n_epochs=30)
     run_sample_model(subject_data, dataset_name=DATASET_NAME, train_test_ratio=0.8,
                      file_name="temp", n_epochs=30)   #"2a subject {} shallow no_batchnorm ttratio1".format(str(i + 1))

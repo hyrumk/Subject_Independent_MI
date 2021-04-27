@@ -7,6 +7,7 @@ from mne.decoding import CSP
 from braindecode.datautil.windowers import create_windows_from_events
 import torch
 from various_computation import computeMI
+from sklearn import metrics
 
 frequency_bands = [(7.5,14),(11,13),(10,14),(9,12),(19,22),(16,22),(26,34),(17.5,20.5),(7,30),
                    (5,14),(11,31),(12,18),(7,9),(15,17),(25,30),(20,25),(5,10),(10,25),(15,30),
@@ -100,12 +101,12 @@ def windows_to_XY(windows_dataset):
     return X,Y
 
 
-def generate_ss_feature(dataset, num_selected_bands=20):
+def generate_ss_feature(dataset, num_sp=20):
     '''
 
     :param dataset: (list) a list of MOABBDatasets by subject (directly from return of call_data)
     :param num_channels:
-    :param num_selected_bands:
+    :param num_sp:
     :return: (list[list[Tensor] (X), Y, frequency_range_order (for test dataset use))
     '''
     frequency_bands = [(7.5, 14), (11, 13), (10, 14), (9, 12), (19, 22), (16, 22), (26, 34), (17.5, 20.5), (7, 30),
@@ -115,7 +116,7 @@ def generate_ss_feature(dataset, num_selected_bands=20):
 
     filtered_dataset = []   # will be a list of (mutual_info, filtered data -> (X,Y) from the for loop, frequency band)
     num_trials = num_subjects = N_COMPONENTS = 0
-
+    V_list = []
     for k,filter_range in enumerate(frequency_bands):
         #<TODO> Copy the entire dataset so that it doesn't perform bandpass filter on the same data (IF THAT's the case)
         kth_filtered = bandpass_data(dataset, filter_range) # [window_subj1, window_subj2 ... window_subjN]
@@ -123,7 +124,7 @@ def generate_ss_feature(dataset, num_selected_bands=20):
         #num_trials =  len(kth_filtered[0])# trial/subject
         #num_subjects = len(kth_filtered)
         #trial_time_sample = kth_filtered[0][0][0].shape[1]
-        U = num_selected_bands//2
+        U = num_sp//2
 
         list_XY = [windows_to_XY(subj_windows) for subj_windows in kth_filtered]
         list_X = [subj_data[0] for subj_data in list_XY]
@@ -150,16 +151,26 @@ def generate_ss_feature(dataset, num_selected_bands=20):
             Vk.append(v)
 
         Vk = np.array(Vk)
-        mutual_info = computeMI(Vk, Y)
+        #mutual_info = computeMI(Vk, Y)
+        mutual_info = metrics.mutual_info_score(Y, Vk)
+        V_list.append(Vk)
 
         filtered_dataset.append((mutual_info, (X,Y), Wk, filter_range, Vk))
-
+    mi = [tup[0] for tup in filtered_dataset]
+    print("MUTUAL INFO!!: ", mi)
+    print("Vk: ", V_list[0])
+    print("Vk2: ", V_list[1])
+    print("Vk3: ", V_list[2])
+    print("Vk4: ", V_list[3])
+    print("Vk5: ", V_list[4])
+    print("Vk6: ", V_list[5])
+    print("Y: ", Y)
     #<TODO> sort filtered_dataset by mutual_info in descending order
     filtered_dataset.sort(key=lambda tup: tup[0]) # sort by mutual_info.
 
     C_list = []
     Y = filtered_dataset[0][1][1]
-    for tup in filtered_dataset[:num_selected_bands]:
+    for tup in filtered_dataset[:num_sp]:
         X = tup[1][0]
         Wk = tup[2]
         C = []
