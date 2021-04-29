@@ -3,7 +3,7 @@ from braindecode.util import set_random_seeds
 from sampleNet import SampleNet
 #from dataprocess import call_data, preprocess_data, create_windows_dataset
 from run_model import run_sample_model
-from independent_dataprocess import call_data, generate_ss_feature
+from independent_dataprocess import call_data, generate_ss_feature, generate_ss_feature_test
 import spectralNet as sn
 import pickle
 import numpy as np
@@ -34,25 +34,59 @@ if __name__ == '__main__':
         pickle.dump(Y, f)
     '''
     data = []
-    for i in range(8):
+    data_test = []
+    CHOSEN_TEST_SUBJECT = 9
+
+    for i in range(9):
+        if i == CHOSEN_TEST_SUBJECT-1:
+            with open('data/braindecode2a_data{}.pkl'.format(i), 'rb') as f:
+                subject_data = pickle.load(f)
+                data_test.append(subject_data)
+            continue
         with open('data/braindecode2a_data{}.pkl'.format(i), 'rb') as f:
             subject_data = pickle.load(f)
             data.append(subject_data)
 
-    X, Y, frequency_order = generate_ss_feature(data)
-    with open('data_X.pkl','wb') as f:
+    X,Y,frequency_order = generate_ss_feature(data_test)
+
+
+    ''' Where you use the data to make a filtered data
+    X, Y, frequency_order = generate_ss_feature(data) # train data
+
+    # Saving part
+    with open('data_train_X{}.pkl'.format(CHOSEN_TEST_SUBJECT),'wb') as f:
         pickle.dump(X, f)
-    with open('data_Y.pkl', 'wb') as f:
+    with open('data_train_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT), 'wb') as f:
         pickle.dump(Y, f)
-    with open('data_freq_order.pkl','wb') as f:
+    with open('data_freq_order{}.pkl'.format(CHOSEN_TEST_SUBJECT),'wb') as f:
         pickle.dump(frequency_order, f)
+    '''
+    with open('data_train_X{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
+        X = pickle.load(f)
+    with open('data_train_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
+        Y = pickle.load(f)
+    with open('data_freq_order{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
+        frequency_order = pickle.load(f)
+
+    #X_test, Y_test = generate_ss_feature_test(data_test, frequency_order[:20])
+
+    with open('data_test_X{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
+        X_test = pickle.load(f)
+    with open('data_test_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
+        Y_test = pickle.load(f)
+
     # X_train, Y_train, frequency_order = generate_ss_feature(data[:-1])
     # X_test, Y_test = generate_ss_feature_test(data[-1], frequency_order)
-    Xn = np.array(X)
-    print(Y)
-    trainloader = sn.numpy_to_trainloader(Xn,Y,100)
-    #testloader = sn.numpy_to_trainloader(X_test, Y_test, 100, shuffle = False)
-    sn.train_and_test(trainloader, 50, 0)
+    X_train = np.array(X)
+    print(X_train[0][0])
+    print(X_train[0][1])
+    print(X_train[1][0])
+    print(X_train[1][1])
+    exit(0)
+    #X_test = np.array(X_test)
+    trainloader = sn.numpy_to_trainloader(X_train,Y,100)
+    testloader = sn.numpy_to_trainloader(X_test, Y_test, 100)
+    sn.train_and_test(trainloader, 20, testloader)
 
 '''
     This brings pickled data (from generate_ss_feature)

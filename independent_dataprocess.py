@@ -15,6 +15,7 @@ frequency_bands = [(7.5,14),(11,13),(10,14),(9,12),(19,22),(16,22),(26,34),(17.5
 
 def call_data(dataset_name, subject_ids):
     '''
+    A function used to call the bci competition data
 
     :param dataset_name: (String) data name to be entered in MOABBDataset
                         (e.g. "BNCI2014001", "BNCI2014004")
@@ -29,10 +30,11 @@ def call_data(dataset_name, subject_ids):
 
 def bandpass_data(datasets, filter_range):
     '''
+    A function used to bandpass filter the given EEG dataset
 
-    :param datasets: (list) a list of MOABBDatasets by subject
+    :param datasets: (list[MOABBDataset]) a list of MOABBDatasets by subject
     :param filter_range: tuple (low_cut, high_cut)
-    :return: (list) (BaseConcatDataset) a list of bandpass filtered subject data
+    :return: (list[BaseConcatDataset]) a list of bandpass filtered data by subject
     '''
     low_cut_hz = filter_range[0]  # low cut frequency for filtering
     high_cut_hz = filter_range[1]  # high cut frequency for filtering
@@ -57,13 +59,15 @@ def bandpass_data(datasets, filter_range):
     for ds in datasets:
         ds_copy = copy.deepcopy(ds)
         preprocess(ds_copy, preprocessors)
-        trial_start_offset_seconds = -0.5
+        trial_start_offset_seconds = 1.0
+        trial_stop_offset_seconds = -0.5
 
         # Extract sampling frequency, check that they are same in all datasets
         sfreq = ds_copy.datasets[0].raw.info['sfreq']
         assert all([ds_subj.raw.info['sfreq'] == sfreq for ds_subj in ds_copy.datasets])
         # Calculate the trial start offset in samples.
         trial_start_offset_samples = int(trial_start_offset_seconds * sfreq)
+        trial_stop_offset_samples = int(trial_stop_offset_seconds * sfreq)
 
         # Create windows using braindecode function for this. It needs parameters to define how
         # trials should be used.
@@ -71,10 +75,9 @@ def bandpass_data(datasets, filter_range):
         windows_dataset = create_windows_from_events(
             ds_copy,
             trial_start_offset_samples=trial_start_offset_samples,
-            trial_stop_offset_samples=0,
+            trial_stop_offset_samples=trial_stop_offset_samples,
             preload=True,
         )
-
         filtered_ds.append(windows_dataset)
 
     return filtered_ds
@@ -101,12 +104,12 @@ def windows_to_XY(windows_dataset):
     return X,Y
 
 
-def generate_ss_feature(dataset, num_sp=20):
+def generate_ss_feature(dataset, num_sp=22):
     '''
 
     :param dataset: (list) a list of MOABBDatasets by subject (directly from return of call_data)
     :param num_channels:
-    :param num_sp:
+    :param num_sp: number of spatial filters to be obtained from the CSP algorithm
     :return: (list[list[Tensor] (X), Y, frequency_range_order (for test dataset use))
     '''
     frequency_bands = [(7.5, 14), (11, 13), (10, 14), (9, 12), (19, 22), (16, 22), (26, 34), (17.5, 20.5), (7, 30),
@@ -115,7 +118,7 @@ def generate_ss_feature(dataset, num_sp=20):
                        (5, 25), (10, 20)]
 
     filtered_dataset = []   # will be a list of (mutual_info, filtered data -> (X,Y) from the for loop, frequency band)
-    num_trials = num_subjects = N_COMPONENTS = 0
+    num_trials, num_subjects, N_COMPONENTS = 0,0,0
     V_list = []
     for k,filter_range in enumerate(frequency_bands):
         #<TODO> Copy the entire dataset so that it doesn't perform bandpass filter on the same data (IF THAT's the case)
@@ -130,23 +133,44 @@ def generate_ss_feature(dataset, num_sp=20):
         list_X = [subj_data[0] for subj_data in list_XY]
         list_Y = [subj_data[1] for subj_data in list_XY]
 
+        print(len(list_X))
+        print(len(list_Y))
+
         #<TODO> possible necessary change in X shape currently (data #, channel, time point) -> (data #, time point, channel) CHANGE IT IF RESULT GETS WEIRD
         X = np.concatenate(list_X)  # concatenated X from all the subjects bandpass filtered by current filter range
         Y = np.concatenate(list_Y)  # concatenated X from all the subjects bandpass filtered by current filter range
 
+        '''
+        ## This is where we trim down the label into binary // DELETE IF NEEDED
+        new_X = []
+        new_Y = []
+        for i, y_elem in enumerate(Y):
+            if y_elem in [0,1]:
+                new_X.append(X[i])
+                y_elem = -1 if y_elem == 0 else 1
+                new_Y.append(y_elem)
         #print("X first: ", X[0])
+        new_X = np.array(new_X)
+        new_Y = np.array(new_Y)
+        X,Y = new_X, new_Y
+        ## Up to here
+        '''
 
         N_COMPONENTS = len(np.unique(Y)) if N_COMPONENTS == 0 else N_COMPONENTS
         csp = CSP(n_components=N_COMPONENTS, reg=None, log=True, norm_trace=False)
         csp_fit = csp.fit_transform(X, Y)
+        print(csp_fit.shape)
 
         # <TODO> MIGHT NEED TO COMPUTE MUTUAL INFO ON OUR OWN
         W = csp.filters_
         Wk = np.column_stack((W[:,:U], W[:,-U:])) # first U and last U columns from the filter (U = num_selected_bands/2)
         Vk = [] # where v will be stored
 
+        a = 0
         for x in X: # X.shape[0] == num_subjects*num_trials # Iterate through X by trial
             mat = Wk.T @ x
+            print(mat.shape)
+            exit(0)
             v = np.log(np.var(mat))
             Vk.append(v)
 
@@ -156,8 +180,10 @@ def generate_ss_feature(dataset, num_sp=20):
         V_list.append(Vk)
 
         filtered_dataset.append((mutual_info, (X,Y), Wk, filter_range, Vk))
+
     mi = [tup[0] for tup in filtered_dataset]
     print("MUTUAL INFO!!: ", mi)
+    print("LENGTH: ", len(V_list[0]))
     print("Vk: ", V_list[0])
     print("Vk2: ", V_list[1])
     print("Vk3: ", V_list[2])
@@ -165,6 +191,7 @@ def generate_ss_feature(dataset, num_sp=20):
     print("Vk5: ", V_list[4])
     print("Vk6: ", V_list[5])
     print("Y: ", Y)
+    exit(0)
     #<TODO> sort filtered_dataset by mutual_info in descending order
     filtered_dataset.sort(key=lambda tup: tup[0]) # sort by mutual_info.
 
@@ -193,10 +220,15 @@ def generate_ss_feature(dataset, num_sp=20):
 #<TODO> Need to gather 20 spectral inputs into one.
 
 def generate_ss_feature_test(dataset, frequency_range_order):
+    '''
 
+    :param dataset: (list[MOABBDataset])
+    :param frequency_range_order:
+    :return:
+    '''
 
     filtered_dataset = []
-
+    N_COMPONENTS = 0
     for k,filter_range in enumerate(frequency_range_order):
         kth_filtered = bandpass_data(dataset, filter_range) # [window_subj1, window_subj2 ... window_subjN]
                                                             # Each window_subj1 consisted of (x,y,window_ind) by trial
@@ -222,7 +254,7 @@ def generate_ss_feature_test(dataset, frequency_range_order):
         # <TODO> MIGHT NEED TO COMPUTE MUTUAL INFO ON OUR OWN
         W = csp.filters_
         Wk = np.column_stack((W[:,:U], W[:,-U:])) # first U and last U columns from the filter (U = num_selected_bands/2)
-        filtered_dataset.append((X,Y), Wk)
+        filtered_dataset.append(((X,Y), Wk))
 
     C_list = []
     for tup in filtered_dataset:
@@ -233,7 +265,7 @@ def generate_ss_feature_test(dataset, frequency_range_order):
         for x in X:
             mult = Wk.T @ x
             cip = np.cov(mult)
-            C.append(torch.Tensor(cip))
+            C.append(cip)
         # C = np.concatenate(C)
         C_list.append(C)
         # C_list will contain 20 different list (C1~C20) which includes spectral spatial inputs of each of 20 frequency ranges
