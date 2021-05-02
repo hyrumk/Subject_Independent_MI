@@ -7,7 +7,7 @@ from mne.decoding import CSP
 from braindecode.datautil.windowers import create_windows_from_events
 import torch
 from various_computation import computeMI
-from sklearn import metrics
+from sklearn import feature_selection
 
 frequency_bands = [(7.5,14),(11,13),(10,14),(9,12),(19,22),(16,22),(26,34),(17.5,20.5),(7,30),
                    (5,14),(11,31),(12,18),(7,9),(15,17),(25,30),(20,25),(5,10),(10,25),(15,30),
@@ -104,12 +104,12 @@ def windows_to_XY(windows_dataset):
     return X,Y
 
 
-def generate_ss_feature(dataset, num_sp=22):
+def generate_ss_feature(dataset, num_components=22, num_band = 20):
     '''
 
     :param dataset: (list) a list of MOABBDatasets by subject (directly from return of call_data)
-    :param num_channels:
-    :param num_sp: number of spatial filters to be obtained from the CSP algorithm
+    :param num_components: number of components to use from spatial filters
+    :param num_band: number of spatial filters to be obtained from the CSP algorithm
     :return: (list[list[Tensor] (X), Y, frequency_range_order (for test dataset use))
     '''
     frequency_bands = [(7.5, 14), (11, 13), (10, 14), (9, 12), (19, 22), (16, 22), (26, 34), (17.5, 20.5), (7, 30),
@@ -118,30 +118,22 @@ def generate_ss_feature(dataset, num_sp=22):
                        (5, 25), (10, 20)]
 
     filtered_dataset = []   # will be a list of (mutual_info, filtered data -> (X,Y) from the for loop, frequency band)
-    num_trials, num_subjects, N_COMPONENTS = 0,0,0
-    V_list = []
+    N_COMPONENTS = num_components
+
     for k,filter_range in enumerate(frequency_bands):
         #<TODO> Copy the entire dataset so that it doesn't perform bandpass filter on the same data (IF THAT's the case)
         kth_filtered = bandpass_data(dataset, filter_range) # [window_subj1, window_subj2 ... window_subjN]
                                                             # Each window_subj1 consisted of (x,y,window_ind) by trial
-        #num_trials =  len(kth_filtered[0])# trial/subject
-        #num_subjects = len(kth_filtered)
-        #trial_time_sample = kth_filtered[0][0][0].shape[1]
-        U = num_sp//2
-
         list_XY = [windows_to_XY(subj_windows) for subj_windows in kth_filtered]
         list_X = [subj_data[0] for subj_data in list_XY]
         list_Y = [subj_data[1] for subj_data in list_XY]
-
-        print(len(list_X))
-        print(len(list_Y))
 
         #<TODO> possible necessary change in X shape currently (data #, channel, time point) -> (data #, time point, channel) CHANGE IT IF RESULT GETS WEIRD
         X = np.concatenate(list_X)  # concatenated X from all the subjects bandpass filtered by current filter range
         Y = np.concatenate(list_Y)  # concatenated X from all the subjects bandpass filtered by current filter range
 
         '''
-        ## This is where we trim down the label into binary // DELETE IF NEEDED
+        ## This is where we can trim down the label into binary // DELETE IF NEEDED
         new_X = []
         new_Y = []
         for i, y_elem in enumerate(Y):
@@ -156,70 +148,51 @@ def generate_ss_feature(dataset, num_sp=22):
         ## Up to here
         '''
 
-        N_COMPONENTS = len(np.unique(Y)) if N_COMPONENTS == 0 else N_COMPONENTS
-        csp = CSP(n_components=N_COMPONENTS, reg=None, log=True, norm_trace=False)
+        #N_COMPONENTS = len(np.unique(Y)) if N_COMPONENTS == 0 else N_COMPONENTS
+        csp = CSP(n_components=N_COMPONENTS, reg=None, log=True, norm_trace=False, component_order='mutual_info' )
         csp_fit = csp.fit_transform(X, Y)
-        print(csp_fit.shape)
+        # <TODO> compare Vk and csp_fit mutual_info
+        Wk = csp.filters_
 
-        # <TODO> MIGHT NEED TO COMPUTE MUTUAL INFO ON OUR OWN
-        W = csp.filters_
-        Wk = np.column_stack((W[:,:U], W[:,-U:])) # first U and last U columns from the filter (U = num_selected_bands/2)
-        Vk = [] # where v will be stored
-
-        a = 0
-        for x in X: # X.shape[0] == num_subjects*num_trials # Iterate through X by trial
-            mat = Wk.T @ x
-            print(mat.shape)
-            exit(0)
-            v = np.log(np.var(mat))
-            Vk.append(v)
-
-        Vk = np.array(Vk)
         #mutual_info = computeMI(Vk, Y)
-        mutual_info = metrics.mutual_info_score(Y, Vk)
-        V_list.append(Vk)
+        mutual_info = np.amax(feature_selection.mutual_info_classif(csp_fit,Y))
+        #mutual_info = feature_selection.mutual_info_classif(Vk, Y)
 
-        filtered_dataset.append((mutual_info, (X,Y), Wk, filter_range, Vk))
+        filtered_dataset.append((mutual_info, (X,Y), Wk, filter_range))
 
-    mi = [tup[0] for tup in filtered_dataset]
-    print("MUTUAL INFO!!: ", mi)
-    print("LENGTH: ", len(V_list[0]))
-    print("Vk: ", V_list[0])
-    print("Vk2: ", V_list[1])
-    print("Vk3: ", V_list[2])
-    print("Vk4: ", V_list[3])
-    print("Vk5: ", V_list[4])
-    print("Vk6: ", V_list[5])
-    print("Y: ", Y)
-    exit(0)
-    #<TODO> sort filtered_dataset by mutual_info in descending order
-    filtered_dataset.sort(key=lambda tup: tup[0]) # sort by mutual_info.
+    filtered_dataset.sort(key=lambda tup: tup[0], reverse=True) # sort by mutual_info.
+
 
     C_list = []
     Y = filtered_dataset[0][1][1]
-    for tup in filtered_dataset[:num_sp]:
+    for tup in filtered_dataset[:num_band]:
         X = tup[1][0]
-        Wk = tup[2]
-        C = []
+        Wk = tup[2][:N_COMPONENTS]
+
+        '''
+        C=[]
         for x in X:
-            mult = Wk.T @ x
+            print(Wk.shape)
+            print(x.shape)
+            exit(0)
+            mult = Wk @ x
             cip = np.cov(mult)
             C.append(cip) #torch.Tensor(cip)
+        '''
+        C = [np.cov(Wk@x) for x in X]
         #C = np.concatenate(C)
         C_list.append(C)
     # C_list will contain 20 different list (C1~C20) which includes spectral spatial inputs of each of 20 frequency ranges
     # C_list = list(20*list(spectral spatial inputs for each trial))
-    input_list = [list(i) for i in zip(*C_list)]
 
+    input_list = [list(i) for i in zip(*C_list)]
     frequency_range_order = [tup[3] for tup in filtered_dataset]
 
-    #return filtered_dataset
-        #<TODO> Fix computeMI
     return input_list, Y, frequency_range_order
 
-#<TODO> Need to gather 20 spectral inputs into one.
+#<TODO> Need to gather 20 spectral inputs into one. Fix according to generate_ss_feature
 
-def generate_ss_feature_test(dataset, frequency_range_order):
+def generate_ss_feature_test(dataset, frequency_range_order, N_COMPONENTS = 22):
     '''
 
     :param dataset: (list[MOABBDataset])
@@ -232,10 +205,6 @@ def generate_ss_feature_test(dataset, frequency_range_order):
     for k,filter_range in enumerate(frequency_range_order):
         kth_filtered = bandpass_data(dataset, filter_range) # [window_subj1, window_subj2 ... window_subjN]
                                                             # Each window_subj1 consisted of (x,y,window_ind) by trial
-        #num_trials =  len(kth_filtered[0])# trial/subject
-        #num_subjects = len(kth_filtered)
-        #trial_time_sample = kth_filtered[0][0][0].shape[1]
-        U = len(frequency_range_order)//2
 
         list_XY = [windows_to_XY(subj_windows) for subj_windows in kth_filtered]
         list_X = [subj_data[0] for subj_data in list_XY]
@@ -245,15 +214,11 @@ def generate_ss_feature_test(dataset, frequency_range_order):
         X = np.concatenate(list_X)  # concatenated X from all the subjects bandpass filtered by current filter range
         Y = np.concatenate(list_Y)  # concatenated X from all the subjects bandpass filtered by current filter range
 
-        print("X first: ", X[0])
-
-        N_COMPONENTS = len(np.unique(Y)) if N_COMPONENTS == 0 else N_COMPONENTS
         csp = CSP(n_components=N_COMPONENTS, reg=None, log=True, norm_trace=False)
         csp_fit = csp.fit_transform(X, Y)
 
-        # <TODO> MIGHT NEED TO COMPUTE MUTUAL INFO ON OUR OWN
-        W = csp.filters_
-        Wk = np.column_stack((W[:,:U], W[:,-U:])) # first U and last U columns from the filter (U = num_selected_bands/2)
+        Wk = csp.filters_
+
         filtered_dataset.append(((X,Y), Wk))
 
     C_list = []
@@ -261,12 +226,8 @@ def generate_ss_feature_test(dataset, frequency_range_order):
         X = tup[0][0]
         Wk = tup[1]
 
-        C = []
-        for x in X:
-            mult = Wk.T @ x
-            cip = np.cov(mult)
-            C.append(cip)
-        # C = np.concatenate(C)
+        C = [np.cov(Wk@x) for x in X]
+
         C_list.append(C)
         # C_list will contain 20 different list (C1~C20) which includes spectral spatial inputs of each of 20 frequency ranges
     input_list = [list(i) for i in zip(*C_list)] #X

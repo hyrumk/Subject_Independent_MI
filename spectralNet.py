@@ -24,7 +24,7 @@ class SpectralNet(nn.Module):
     ):
         super(SpectralNet, self).__init__()
         self.features = nn.ModuleList([nn.Sequential(
-            nn.Conv2d(1,10, kernel_size = 3, padding = 5),
+            nn.Conv2d(1,10, kernel_size = 3, padding = 4),
             nn.ReLU(),
             nn.Dropout(0.5),
             nn.Conv2d(10, 14, kernel_size=3, padding=1),
@@ -131,11 +131,11 @@ def train(epochs, train_loader, model, optimizer, loss_function, PATH = './indep
     return model
 
 
-def train_and_test(train_loader, epoch, test_loader, num_channel = 20, PATH = './independent_model.pth'):
+def train_and_test(train_loader, epoch, test_loader, num_band = 20, PATH = './independent_model.pth'):
     use_cuda = torch.cuda.is_available()
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    model = SpectralNet(num_channel).cuda() if use_cuda else SpectralNet(num_channel)
+    model = SpectralNet(num_band).cuda() if use_cuda else SpectralNet(num_band)
     optimizer = optim.Adam(model.parameters(), lr=0.00001)
     loss_function = nn.CrossEntropyLoss().to(device)
 

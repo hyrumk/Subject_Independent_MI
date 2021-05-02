@@ -15,24 +15,7 @@ if __name__ == '__main__':
     DATASET_NAME = "BNCI2014001"
     #data_list = call_data(DATASET_NAME, [i for i in range(1,10)])
     #data = call_data(DATASET_NAME, [i for i in range(1,10)])
-    '''    #Calls the data and preprocess
-    data = call_data(DATASET_NAME, [1,2])
-    i = 0
-    subject_data = data[i]
-    X, Y, frequency_order = generate_ss_feature(data)
-    print(frequency_order)
-    print(len(X)) # number of trials
-    print(len(X[0]))  # should be 20
-    print(X[0][0].shape)  # a single spectral input
-    print(Y.shape)
-    
-    
-    # for saving in a pkl file
-    with open('data_X.pkl','wb') as f:
-        pickle.dump(X, f)
-    with open('data_Y.pkl', 'wb') as f:
-        pickle.dump(Y, f)
-    '''
+
     data = []
     data_test = []
     CHOSEN_TEST_SUBJECT = 9
@@ -47,20 +30,10 @@ if __name__ == '__main__':
             subject_data = pickle.load(f)
             data.append(subject_data)
 
-    X,Y,frequency_order = generate_ss_feature(data_test)
 
+    #Where you use the data to make a filtered data
+    #X, Y, frequency_order = generate_ss_feature(data) # train data
 
-    ''' Where you use the data to make a filtered data
-    X, Y, frequency_order = generate_ss_feature(data) # train data
-
-    # Saving part
-    with open('data_train_X{}.pkl'.format(CHOSEN_TEST_SUBJECT),'wb') as f:
-        pickle.dump(X, f)
-    with open('data_train_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT), 'wb') as f:
-        pickle.dump(Y, f)
-    with open('data_freq_order{}.pkl'.format(CHOSEN_TEST_SUBJECT),'wb') as f:
-        pickle.dump(frequency_order, f)
-    '''
     with open('data_train_X{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
         X = pickle.load(f)
     with open('data_train_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
@@ -68,35 +41,56 @@ if __name__ == '__main__':
     with open('data_freq_order{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
         frequency_order = pickle.load(f)
 
-    #X_test, Y_test = generate_ss_feature_test(data_test, frequency_order[:20])
+
+    X_test, Y_test = generate_ss_feature_test(data_test, frequency_order[:20])  # test data
+    with open('data_test_X{}.pkl'.format(CHOSEN_TEST_SUBJECT),'wb') as f:
+        pickle.dump(X_test, f)
+    with open('data_test_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT), 'wb') as f:
+        pickle.dump(Y_test, f)
 
     with open('data_test_X{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
         X_test = pickle.load(f)
     with open('data_test_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
         Y_test = pickle.load(f)
 
+
     # X_train, Y_train, frequency_order = generate_ss_feature(data[:-1])
     # X_test, Y_test = generate_ss_feature_test(data[-1], frequency_order)
     X_train = np.array(X)
-    print(X_train[0][0])
-    print(X_train[0][1])
-    print(X_train[1][0])
-    print(X_train[1][1])
-    exit(0)
+
+
     #X_test = np.array(X_test)
     trainloader = sn.numpy_to_trainloader(X_train,Y,100)
     testloader = sn.numpy_to_trainloader(X_test, Y_test, 100)
-    sn.train_and_test(trainloader, 20, testloader)
+    sn.train_and_test(trainloader, 200, testloader)
 
 '''
+
     This brings pickled data (from generate_ss_feature)
     with open('data_X.pkl', 'rb') as f:
         X = pickle.load(f)
     with open('data_Y.pkl', 'rb') as f:
         Y = pickle.load(f)
+    
+    
+    #### FOR LOADING preprocessed TRAINING DATA#####  
+    with open('data_train_X{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
+        X = pickle.load(f)
+    with open('data_train_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
+        Y = pickle.load(f)
+    with open('data_freq_order{}.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
+        frequency_order = pickle.load(f)
+    ###################################################
 
-
-
+####################################
+    # Saving part
+    with open('data_train_X{}.pkl'.format(CHOSEN_TEST_SUBJECT),'wb') as f:
+        pickle.dump(X, f)
+    with open('data_train_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT), 'wb') as f:
+        pickle.dump(Y, f)
+    with open('data_freq_order{}.pkl'.format(CHOSEN_TEST_SUBJECT),'wb') as f:
+        pickle.dump(frequency_order, f)
+##############################################
     #run_sample_model(subject_data, dataset_name=DATASET_NAME, file_name="2a subject {} temp".format(str(i + 1)), n_epochs=30)
     run_sample_model(subject_data, dataset_name=DATASET_NAME, train_test_ratio=0.8,
                      file_name="temp", n_epochs=30)   #"2a subject {} shallow no_batchnorm ttratio1".format(str(i + 1))
