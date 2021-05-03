@@ -104,7 +104,7 @@ def windows_to_XY(windows_dataset):
     return X,Y
 
 
-def generate_ss_feature(dataset, num_components=22, num_band = 20):
+def generate_ss_feature(dataset, num_components=22, num_band = 20, binary = True):
     '''
 
     :param dataset: (list) a list of MOABBDatasets by subject (directly from return of call_data)
@@ -132,21 +132,21 @@ def generate_ss_feature(dataset, num_components=22, num_band = 20):
         X = np.concatenate(list_X)  # concatenated X from all the subjects bandpass filtered by current filter range
         Y = np.concatenate(list_Y)  # concatenated X from all the subjects bandpass filtered by current filter range
 
-        '''
-        ## This is where we can trim down the label into binary // DELETE IF NEEDED
-        new_X = []
-        new_Y = []
-        for i, y_elem in enumerate(Y):
-            if y_elem in [0,1]:
-                new_X.append(X[i])
-                y_elem = -1 if y_elem == 0 else 1
-                new_Y.append(y_elem)
-        #print("X first: ", X[0])
-        new_X = np.array(new_X)
-        new_Y = np.array(new_Y)
-        X,Y = new_X, new_Y
-        ## Up to here
-        '''
+        if binary:
+            ## This is where we can trim down the label into binary // DELETE IF NEEDED
+            new_X = []
+            new_Y = []
+            for i, y_elem in enumerate(Y):
+                if y_elem in [0,1]:
+                    new_X.append(X[i])
+                    #y_elem = 0 if y_elem == 0 else 1
+                    new_Y.append(y_elem)
+            #print("X first: ", X[0])
+            new_X = np.array(new_X)
+            new_Y = np.array(new_Y)
+            X,Y = new_X, new_Y
+            ## Up to here
+
 
         #N_COMPONENTS = len(np.unique(Y)) if N_COMPONENTS == 0 else N_COMPONENTS
         csp = CSP(n_components=N_COMPONENTS, reg=None, log=True, norm_trace=False, component_order='mutual_info' )
@@ -192,7 +192,7 @@ def generate_ss_feature(dataset, num_components=22, num_band = 20):
 
 #<TODO> Need to gather 20 spectral inputs into one. Fix according to generate_ss_feature
 
-def generate_ss_feature_test(dataset, frequency_range_order, N_COMPONENTS = 22):
+def generate_ss_feature_test(dataset, frequency_range_order, N_COMPONENTS = 22, binary=True):
     '''
 
     :param dataset: (list[MOABBDataset])
@@ -213,6 +213,19 @@ def generate_ss_feature_test(dataset, frequency_range_order, N_COMPONENTS = 22):
         #<TODO> possible necessary change in X shape currently (data #, channel, time point) -> (data #, time point, channel) CHANGE IT IF RESULT GETS WEIRD
         X = np.concatenate(list_X)  # concatenated X from all the subjects bandpass filtered by current filter range
         Y = np.concatenate(list_Y)  # concatenated X from all the subjects bandpass filtered by current filter range
+
+        if binary:
+            new_X = []
+            new_Y = []
+            for i, y_elem in enumerate(Y):
+                if y_elem in [0,1]:
+                    new_X.append(X[i])
+                    #y_elem = -1 if y_elem == 0 else 1
+                    new_Y.append(y_elem)
+            #print("X first: ", X[0])
+            new_X = np.array(new_X)
+            new_Y = np.array(new_Y)
+            X,Y = new_X, new_Y
 
         csp = CSP(n_components=N_COMPONENTS, reg=None, log=True, norm_trace=False)
         csp_fit = csp.fit_transform(X, Y)

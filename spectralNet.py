@@ -19,8 +19,7 @@ class SpectralNet(nn.Module):
         self,
         n_selected, # number of selected bands
         #in_chans,
-        output_dim = 4,
-        n_classes = 2,
+        output_dim = 4
     ):
         super(SpectralNet, self).__init__()
         self.features = nn.ModuleList([nn.Sequential(
@@ -56,7 +55,7 @@ class SpectralNet(nn.Module):
 
 #def spectral_input_to_dataloader():
 
-def numpy_to_trainloader(X,Y, batch_size, num_workers = 4, shuffle = False):
+def numpy_to_trainloader(X,Y, batch_size, num_workers = 2, shuffle = False):
     '''
 
     :param X: (numpy)
@@ -93,8 +92,7 @@ def train(epochs, train_loader, model, optimizer, loss_function, PATH = './indep
     for epoch in range(epochs):
         running_loss = 0.0
         for batch, data in enumerate(train_loader,0):
-            #<TODO> Delete this after using
-
+            
             inputs, labels = data
 
             inputs = inputs.to(device)
@@ -116,8 +114,8 @@ def train(epochs, train_loader, model, optimizer, loss_function, PATH = './indep
             running_loss += loss.item()
 
             if batch % 100 == 0:
-                print('[%d, %5d] loss: %.3f' %
-                      (epoch + 1, batch + 1, running_loss/100))
+                #<TODO> saves the model with the minimum loss
+                print("Epoch {} Loss: ".format(epoch), running_loss)
                 '''
                 print(outputs.shape)
                 print(outputs)
@@ -131,11 +129,11 @@ def train(epochs, train_loader, model, optimizer, loss_function, PATH = './indep
     return model
 
 
-def train_and_test(train_loader, epoch, test_loader, num_band = 20, PATH = './independent_model.pth'):
+def train_and_test(train_loader, epoch, test_loader, num_classes = 4, num_band = 20, PATH = './independent_model.pth'):
     use_cuda = torch.cuda.is_available()
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    model = SpectralNet(num_band).cuda() if use_cuda else SpectralNet(num_band)
+    model = SpectralNet(num_band, output_dim=num_classes).cuda() if use_cuda else SpectralNet(num_band,  output_dim=num_classes)
     optimizer = optim.Adam(model.parameters(), lr=0.00001)
     loss_function = nn.CrossEntropyLoss().to(device)
 
@@ -147,8 +145,9 @@ def train_and_test(train_loader, epoch, test_loader, num_band = 20, PATH = './in
     test_model = trained_model
     correct = 0
     total = 0
-    class_total = list(0. for i in range(4))
-    class_correct = list(0. for i in range(4))
+    class_total = list(0. for i in range(num_classes))
+    class_correct = list(0. for i in range(num_classes))
+    pred_total = list(0. for i in range(num_classes))
     with torch.no_grad():
         for data in test_loader:
             inputs, labels = data
@@ -161,37 +160,26 @@ def train_and_test(train_loader, epoch, test_loader, num_band = 20, PATH = './in
             outputs = test_model(model_input)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
+            #<TODO> Fix how you come up with accuracy
             for i,pred in enumerate(predicted):
-                if labels[i] == 0:
-                    class_total[0] += 1
-                elif labels[i] == 1:
-                    class_total[1] += 1
-                elif labels[i] == 2:
-                    class_total[2] += 1
-                else:
-                    class_total[3] += 1
-                if pred == labels[i]:
-                    correct += 1
-                    if pred == 0:
-                        class_correct[0] += 1
-                    elif pred == 1:
-                        class_correct[1] += 1
-                    elif pred == 2:
-                        class_correct[2] += 1
-                    else:
-                        class_correct[3] += 1
+                answer = labels[i]
+                class_total[answer] += 1 if labels[i] == answer else 0
+                pred_total[pred] += 1
+                class_correct[pred] += 1 if pred == answer else 0
+                correct += 1 if pred == answer else 0
 
-    print("RESULT\n\n")
-    print("Total: ", float(correct/total))
-    print("Class 0: ", float(class_correct[0]/class_total[0]))
-    print("Class 1: ", float(class_correct[1] / class_total[1]))
-    print("Class 2: ", float(class_correct[2] / class_total[2]))
-    print("Class 3: ", float(class_correct[3] / class_total[3]))
+    result = "RESULT\n\n"
+    result += "Total Accuracy: {}\n".format(float(correct/total))
+    result += "=== Precision ===\n"
+    result += ''.join(["Class {}: {}\n".format(i, float(class_correct[i]/pred_total[i]))for i in range(len(class_total))])
+    result += "=== Recall ===\n"
+    result += ''.join(["Class {}: {}\n".format(i, float(class_correct[i]/class_total[i]))for i in range(len(class_total))])
+    print(result)
+
+    return result
+
 # <TODO> finish train, train_and_test, numpy_to_trainloader
 
 
 
 #summary(SpectralNet, (28,28,20))
-model = SpectralNet(20).cuda()
-model1 = SpectralNet(20)
-print(model1)
