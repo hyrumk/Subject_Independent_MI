@@ -179,8 +179,10 @@ def train_and_test(train_loader, epoch, test_loader, num_classes = 4, num_band =
     result += "Total Accuracy: {}\n".format(float(correct/total))
     result += "=== Precision ===\n"
     result += ''.join(["Class {}: {}\n".format(i, float(class_correct[i]/pred_total[i]))for i in range(len(class_total))])
+    '''
     result += "=== Recall ===\n"
     result += ''.join(["Class {}: {}\n".format(i, float(class_correct[i]/class_total[i]))for i in range(len(class_total))])
+    '''
     print(result)
 
     return result

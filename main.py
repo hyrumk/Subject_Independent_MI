@@ -16,10 +16,13 @@ def main(args):
     DATASET_NAME = "BNCI2014001"
     data_list = call_data(DATASET_NAME, [i for i in range(1,10)])
 
-    subject_list = args.import_data if len(args.import_data) else [i for i in range(9)]  # 9 is for 2a specific. <TODO> Needs a change when expanding to another dataset
+    ls = args.import_data.split(',')
+
+    subject_list = [int(float(x)) for x in ls]  # 9 is for 2a specific. <TODO> Needs a change when expanding to another dataset
+
     input_exists = True
     for i in subject_list:
-        subject = i+1
+        subject = i
         if os.path.exists('data/data_train_X{}.pkl'.format(subject)) and os.path.exists('data/data_train_Y{}.pkl'.format(subject)) and\
             os.path.exists('data/data_freq_order{}.pkl'.format(subject)) and os.path.exists('data/data_test_X{}.pkl'.format(subject)) and\
             os.path.exists('data/data_test_Y{}.pkl'.format(subject)):
@@ -29,16 +32,20 @@ def main(args):
             input_exists = False
             break
 
+
+    target_subject_dict = {} # dict{(X_test,Y_test)}
+    train_subject_dict = {} # dict{list[(X,Y,frequency_order)]}
+
     # required input,labels not present (spatial-spectral data, both training and test data according to a target subject)
-    if not input_exists:
+    if (not input_exists) or args.refresh_feature:
         for subject in subject_list:
             # IMPORTING bcicompetition data via braindecode
             data = []   # a list of all training subjects (list[MOABB dataset])
             data_test = []  # the target test subject (list[MOABB dataset])
-            CHOSEN_TEST_SUBJECT = subject + 1
+            CHOSEN_TEST_SUBJECT = subject
 
-            for i in range(len(subject_list)):
-                if i == CHOSEN_TEST_SUBJECT - 1:
+            for i in subject_list:
+                if i == CHOSEN_TEST_SUBJECT:
                     subject_data = data_list[i]
                     data_test.append(subject_data)
                     continue
@@ -50,39 +57,58 @@ def main(args):
             X, Y, frequency_order = generate_ss_feature(data) # train data
             X_test, Y_test = generate_ss_feature_test(data_test, frequency_order[:20])  # test data
 
-            # save generated train data
-            with open('data/data_train_X{}.pkl'.format(CHOSEN_TEST_SUBJECT), 'wb') as f:
-                pickle.dump(X, f)
-            with open('data/data_train_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT), 'wb') as f:
-                pickle.dump(Y, f)
-            with open('data/data_freq_order{}.pkl'.format(CHOSEN_TEST_SUBJECT), 'wb') as f:
-                pickle.dump(frequency_order, f)
+            if args.download_input:
+                # save generated train data
+                with open('data/data_train_X{}.pkl'.format(CHOSEN_TEST_SUBJECT), 'wb') as f:
+                    pickle.dump(X, f)
+                with open('data/data_train_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT), 'wb') as f:
+                    pickle.dump(Y, f)
+                with open('data/data_freq_order{}.pkl'.format(CHOSEN_TEST_SUBJECT), 'wb') as f:
+                    pickle.dump(frequency_order, f)
 
-            # save generated test data
-            with open('data/data_test_X{}.pkl'.format(CHOSEN_TEST_SUBJECT),'wb') as f:
-                pickle.dump(X_test, f)
-            with open('data/data_test_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT), 'wb') as f:
-                pickle.dump(Y_test, f)
+                # save generated test data
+                with open('data/data_test_X{}.pkl'.format(CHOSEN_TEST_SUBJECT),'wb') as f:
+                    pickle.dump(X_test, f)
+                with open('data/data_test_Y{}.pkl'.format(CHOSEN_TEST_SUBJECT), 'wb') as f:
+                    pickle.dump(Y_test, f)
+            else:
+                target_subject_dict[CHOSEN_TEST_SUBJECT] = (X_test,Y_test)
+                train_subject_dict[CHOSEN_TEST_SUBJECT] = (X,Y,frequency_order)
 
+
+    # check if needed input exists
+    input_exists = True
+    for i in subject_list:
+        subject = i
+        if os.path.exists('data/data_train_X{}.pkl'.format(subject)) and os.path.exists('data/data_train_Y{}.pkl'.format(subject)) and\
+            os.path.exists('data/data_freq_order{}.pkl'.format(subject)) and os.path.exists('data/data_test_X{}.pkl'.format(subject)) and\
+            os.path.exists('data/data_test_Y{}.pkl'.format(subject)):
+            # file exists
+            pass
+        else:
+            input_exists = False
+            break
 
 
     # Running spectral-spatial net
     final_result_string = ""
     for subject in subject_list:
-        CHOSEN_TEST_SUBJECT = subject + 1
-        with open('data/data_train_X{}_binary.pkl'.format(CHOSEN_TEST_SUBJECT), 'rb') as f:
-            X = pickle.load(f)
-        with open('data/data_train_Y{}_binary.pkl'.format(CHOSEN_TEST_SUBJECT), 'rb') as f:
-            Y = pickle.load(f)
-        with open('data/data_freq_order{}_binary.pkl'.format(CHOSEN_TEST_SUBJECT), 'rb') as f:
-            frequency_order = pickle.load(f)
+        CHOSEN_TEST_SUBJECT = subject
+        if input_exists:
+            with open('data/data_train_X{}_binary.pkl'.format(CHOSEN_TEST_SUBJECT), 'rb') as f:
+                X = pickle.load(f)
+            with open('data/data_train_Y{}_binary.pkl'.format(CHOSEN_TEST_SUBJECT), 'rb') as f:
+                Y = pickle.load(f)
+            with open('data/data_freq_order{}_binary.pkl'.format(CHOSEN_TEST_SUBJECT), 'rb') as f:
+                frequency_order = pickle.load(f)
 
-
-        with open('data/data_test_X{}_binary.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
-            X_test = pickle.load(f)
-        with open('data/data_test_Y{}_binary.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
-            Y_test = pickle.load(f)
-
+            with open('data/data_test_X{}_binary.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
+                X_test = pickle.load(f)
+            with open('data/data_test_Y{}_binary.pkl'.format(CHOSEN_TEST_SUBJECT),'rb') as f:
+                Y_test = pickle.load(f)
+        else:
+            X_test, Y_test = target_subject_dict[CHOSEN_TEST_SUBJECT]
+            X,Y,frequency_order = train_subject_dict[CHOSEN_TEST_SUBJECT]
 
         X_train = np.array(X)
 
@@ -100,11 +126,12 @@ def main(args):
 
 
 
-# <TODO> Give a range of selection in BCI dataset
+# <TODO> Give a range of selection in BCI dataset, add validation to the training process
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--load_input", type=strtobool, default="true") # loads the generated data if you have it already
-    parser.add_argument("--import_data", type=list, default=[])   #imports braindecode data of selection and preprocess.
+    parser.add_argument("--download_input", type=strtobool, default="false")
+    parser.add_argument("--import_data", type=str, default='1,2,3,4,5,6,7,8,9')   #imports braindecode data of selection and preprocess.
+    parser.add_argument("--refresh_feature", type=strtobool, default="false")
     parser.add_argument("--batch_size", type=int, default=100)
     parser.add_argument("--epoch", type=int, default=150)
 
