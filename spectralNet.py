@@ -90,9 +90,12 @@ def train(epochs, train_loader, model, optimizer, loss_function, PATH = './indep
     model.to(device)
     model.train()
     for epoch in range(epochs):
+        epoch_loss = 0.0
         running_loss = 0.0
+        train_acc = 0
         for batch, data in enumerate(train_loader,0):
-            
+            model.train()
+
             inputs, labels = data
 
             inputs = inputs.to(device)
@@ -111,11 +114,11 @@ def train(epochs, train_loader, model, optimizer, loss_function, PATH = './indep
             loss.backward()
             optimizer.step()
 
+            epoch_loss += outputs.shape[0] * loss.item()
             running_loss += loss.item()
 
             if batch % 100 == 0:
                 #<TODO> saves the model with the minimum loss
-                print("Epoch {} Loss: ".format(epoch), running_loss)
                 '''
                 print(outputs.shape)
                 print(outputs)
@@ -123,6 +126,10 @@ def train(epochs, train_loader, model, optimizer, loss_function, PATH = './indep
                 print(labels)
                 '''
                 running_loss = 0.0
+            model.eval()
+            prediction = model(model_input)
+            #train_acc += (prediction == labels).float().sum()
+        print("Training Epoch {} Loss: ".format(epoch), running_loss)
     print("Finished Training")
     torch.save(model.state_dict(),PATH)
 

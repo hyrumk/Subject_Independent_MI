@@ -28,12 +28,13 @@ def call_data(dataset_name, subject_ids):
     return datasets
 
 
-def bandpass_data(datasets, filter_range):
+def bandpass_data(datasets, filter_range, window_start_offset = 1.0, window_end_offset = -0.5):
     '''
     A function used to bandpass filter the given EEG dataset
 
     :param datasets: (list[MOABBDataset]) a list of MOABBDatasets by subject
     :param filter_range: tuple (low_cut, high_cut)
+
     :return: (list[BaseConcatDataset]) a list of bandpass filtered data by subject
     '''
     low_cut_hz = filter_range[0]  # low cut frequency for filtering
@@ -59,8 +60,8 @@ def bandpass_data(datasets, filter_range):
     for ds in datasets:
         ds_copy = copy.deepcopy(ds)
         preprocess(ds_copy, preprocessors)
-        trial_start_offset_seconds = 1.0
-        trial_stop_offset_seconds = -0.5
+        trial_start_offset_seconds = window_start_offset
+        trial_stop_offset_seconds = window_end_offset
 
         # Extract sampling frequency, check that they are same in all datasets
         sfreq = ds_copy.datasets[0].raw.info['sfreq']
@@ -248,8 +249,94 @@ def generate_ss_feature_test(dataset, frequency_range_order, N_COMPONENTS = 22, 
 
     return input_list, Y
 
+def concat_dataset(dataset, bandpass_range = (4,38), binary = True):
+    '''
+    Just make concatenated numpy
 
+    :param dataset:
+    :param bandpass_range:
+    :param binary:
+    :return:
+    '''
+    filtered_windowdata = bandpass_data(dataset, bandpass_range)
+    list_XY = [windows_to_XY(subj_windows) for subj_windows in filtered_windowdata]
+    list_X = [subj_data[0] for subj_data in list_XY]
+    list_Y = [subj_data[1] for subj_data in list_XY]
 
+    X = np.concatenate(list_X)  # concatenated X from all the subjects bandpass filtered by current filter range
+    Y = np.concatenate(list_Y)  # concatenated X from all the subjects bandpass filtered by current filter range
+
+    if binary:
+        new_X = []
+        new_Y = []
+        for i, y_elem in enumerate(Y):
+            if y_elem in [0, 1]:
+                new_X.append(X[i])
+                # y_elem = -1 if y_elem == 0 else 1
+                new_Y.append(y_elem)
+        # print("X first: ", X[0])
+        new_X = np.array(new_X)
+        new_Y = np.array(new_Y)
+        X, Y = new_X, new_Y
+
+    print(X.shape)
+    print(Y.shape)
+
+    return X, Y
+
+def bandpass_window_BaseConcat(dataset, bandpass_range = (4,38),
+                               window_start_offset = 1.0,
+                               window_end_offset = -0.5):
+    '''
+    For bandpass filtering and windowing to return in BaseConcatDataset form.
+    :param dataset:
+    :param bandpass_range:
+    :param window_start_offset:
+    :param window_end_offset:
+    :return:
+    '''
+    low_cut_hz = bandpass_range[0]
+    high_cut_hz = bandpass_range[1]
+
+    factor_new = 1e-3
+    init_block_size = 1000
+
+    preprocessors = [
+        # keep only EEG sensors
+        MNEPreproc(fn='pick_types', eeg=True, meg=False, stim=False),
+        # convert from volt to microvolt, directly modifying the numpy array
+        NumpyPreproc(fn=lambda x: x * 1e6),
+        # bandpass filter
+        MNEPreproc(fn='filter', l_freq=low_cut_hz, h_freq=high_cut_hz),
+        # exponential moving standardization
+        NumpyPreproc(fn=exponential_moving_standardize, factor_new=factor_new,
+                     init_block_size=init_block_size)
+    ]
+
+    # Transform the data
+    ds_copy = copy.deepcopy(dataset)
+    preprocess(ds_copy, preprocessors)
+    trial_start_offset_seconds = window_start_offset
+    trial_stop_offset_seconds = window_end_offset
+
+    # Extract sampling frequency, check that they are same in all datasets
+    sfreq = ds_copy.datasets[0].raw.info['sfreq']
+    assert all([ds_subj.raw.info['sfreq'] == sfreq for ds_subj in ds_copy.datasets])
+    # Calculate the trial start offset in samples.
+    trial_start_offset_samples = int(trial_start_offset_seconds * sfreq)
+    trial_stop_offset_samples = int(trial_stop_offset_seconds * sfreq)
+
+    # Create windows using braindecode function for this. It needs parameters to define how
+    # trials should be used.
+
+    windows_dataset = create_windows_from_events(
+        ds_copy,
+        trial_start_offset_samples=trial_start_offset_samples,
+        trial_stop_offset_samples=trial_stop_offset_samples,
+        preload=True,
+    )
+
+    return windows_dataset
 
 '''
 DATASET_NAME = "BNCI2014001"

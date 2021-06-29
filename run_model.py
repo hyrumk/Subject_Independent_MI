@@ -163,7 +163,18 @@ def plot_result_sample(clf, dataset_name, train_test_ratio, file_name):
 
 
 
-def run_shallow_net(train_set, valid_set, num_classes, num_epochs):
+def run_shallow_net(train_dataset_X, train_dataset_Y, test_dataset_X, test_dataset_Y = None, num_epochs = 30, batch_size = 100):
+    '''
+
+    <TODO> when X and Y together as one, consider dataset_Y None
+    :param train_dataset_X:
+    :param train_dataset_Y:
+    :param test_dataset_X: (numpy || BaseConcatDataset)
+    :param test_dataset_Y: None when X is BaseConcatDataset
+    :param num_epochs:
+    :param batch_size:
+    :return:
+    '''
     cuda = torch.cuda.is_available()  # check if GPU is available, if True chooses to use it
     device = 'cuda' if cuda else 'cpu'
     if cuda:
@@ -171,10 +182,11 @@ def run_shallow_net(train_set, valid_set, num_classes, num_epochs):
     seed = 20200220  # random seed to make results reproducible
     # Set random seed to be able to reproduce results
     set_random_seeds(seed=seed, cuda=cuda)
-    n_classes = num_classes
 
-    n_chans = train_set[0][0].shape[0]
-    input_window_samples = train_set[0][0].shape[1]
+    n_classes = 4
+    # Extract number of chans and time steps from dataset
+    n_chans = train_dataset_X.shape[1]
+    input_window_samples = train_dataset_X.shape[0]
 
     model = ShallowFBCSPNet(
         n_chans,
@@ -194,14 +206,14 @@ def run_shallow_net(train_set, valid_set, num_classes, num_epochs):
     # lr = 1 * 0.01
     # weight_decay = 0.5 * 0.001
 
-    batch_size = 64
+    batch_size = batch_size
     n_epochs = num_epochs
 
     clf = EEGClassifier(
         model,
         criterion=torch.nn.NLLLoss,
         optimizer=torch.optim.AdamW,
-        train_split=predefined_split(valid_set),  # using valid_set for validation
+        train_split=predefined_split(test_dataset_X),  # using valid_set for validation
         optimizer__lr=lr,
         optimizer__weight_decay=weight_decay,
         batch_size=batch_size,
@@ -212,37 +224,4 @@ def run_shallow_net(train_set, valid_set, num_classes, num_epochs):
     )
     # Model training for a specified number of epochs. `y` is None as it is already supplied
     # in the dataset.
-    clf.fit(train_set, y=None, epochs=n_epochs)
-
-    # Extract loss and accuracy values for plotting from history object
-    results_columns = ['train_loss', 'valid_loss', 'train_accuracy', 'valid_accuracy']
-    df = pd.DataFrame(clf.history[:, results_columns], columns=results_columns,
-                      index=clf.history[:, 'epoch'])
-
-    # get percent of misclass for better visual comparison to loss
-    df = df.assign(train_misclass=100 - 100 * df.train_accuracy,
-                   valid_misclass=100 - 100 * df.valid_accuracy)
-
-    plt.style.use('seaborn')
-    fig, ax1 = plt.subplots(figsize=(8, 3))
-    df.loc[:, ['train_loss', 'valid_loss']].plot(
-        ax=ax1, style=['-', ':'], marker='o', color='tab:blue', legend=False, fontsize=14)
-
-    ax1.tick_params(axis='y', labelcolor='tab:blue', labelsize=14)
-    ax1.set_ylabel("Loss", color='tab:blue', fontsize=14)
-
-    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-
-    df.loc[:, ['train_misclass', 'valid_misclass']].plot(
-        ax=ax2, style=['-', ':'], marker='o', color='tab:red', legend=False)
-    ax2.tick_params(axis='y', labelcolor='tab:red', labelsize=14)
-    ax2.set_ylabel("Misclassification Rate [%]", color='tab:red', fontsize=14)
-    ax2.set_ylim(ax2.get_ylim()[0], 85)  # make some room for legend
-    ax1.set_xlabel("Epoch", fontsize=14)
-
-    # where some data has already been plotted to ax
-    handles = []
-    handles.append(Line2D([0], [0], color='black', linewidth=1, linestyle='-', label='Train'))
-    handles.append(Line2D([0], [0], color='black', linewidth=1, linestyle=':', label='Valid'))
-    plt.legend(handles, [h.get_label() for h in handles], fontsize=14)
-    plt.tight_layout()
+    clf.fit(train_dataset_X, y=train_dataset_Y, epochs=n_epochs)
