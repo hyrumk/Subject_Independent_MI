@@ -74,7 +74,7 @@ def numpy_to_trainloader(X,Y, batch_size, num_workers = 2, shuffle = False):
 
 
 
-def train(epochs, train_loader, model, optimizer, loss_function, PATH = './independent_model.pth'):
+def train(epochs, train_loader, model, optimizer, loss_function, PATH = './independent_model.pth', device = 'gpu'):
     '''
 
     :param epochs: (int) number of epochs to train
@@ -86,7 +86,9 @@ def train(epochs, train_loader, model, optimizer, loss_function, PATH = './indep
     :return:
     '''
     use_cuda = torch.cuda.is_available()
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    if device == 'gpu':
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
     model.to(device)
     model.train()
     for epoch in range(epochs):
@@ -136,15 +138,16 @@ def train(epochs, train_loader, model, optimizer, loss_function, PATH = './indep
     return model
 
 
-def train_and_test(train_loader, epoch, test_loader, num_classes = 4, num_band = 20, PATH = './independent_model.pth'):
+def train_and_test(train_loader, epoch, test_loader, num_classes = 4, num_band = 20, PATH = './independent_model.pth', device = 'gpu'):
     use_cuda = torch.cuda.is_available()
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    if device == 'gpu':
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     model = SpectralNet(num_band, output_dim=num_classes).cuda() if use_cuda else SpectralNet(num_band,  output_dim=num_classes)
     optimizer = optim.Adam(model.parameters(), lr=0.00001)
     loss_function = nn.CrossEntropyLoss().to(device)
 
-    trained_model = train(epoch, train_loader, model, optimizer, loss_function, PATH)
+    trained_model = train(epoch, train_loader, model, optimizer, loss_function, PATH, device)
     #test_model = SpectralNet(20).to(device)
     #test_model.load_state_dict(torch.load(PATH))
     #test_model.eval()
