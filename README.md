@@ -28,3 +28,5 @@ The batch size of the data will be 100 and will run the deep convolutional neura
 
 ##### *NOTE: This is an implementation done on a personal level. The code is very unorganized at the moment and the input it can take is very limited, but I'm planning on updating the code consistently.
 
+for some reason, create_windows_from_events function used in bandpass_data in independent_dataprocess.py comes up with the list index out of range error, which does not occur when run on colab. 
+
