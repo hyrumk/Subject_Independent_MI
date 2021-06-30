@@ -28,7 +28,7 @@ def call_data(dataset_name, subject_ids):
     return datasets
 
 
-def bandpass_data(datasets, filter_range, window_start_offset = 1.0, window_end_offset = -0.5):
+def bandpass_data(datasets, filter_range, window_start_offset = 1.0, window_end_offset = 0):
     '''
     A function used to bandpass filter the given EEG dataset
 
@@ -79,6 +79,7 @@ def bandpass_data(datasets, filter_range, window_start_offset = 1.0, window_end_
             trial_stop_offset_samples=trial_stop_offset_samples,
             preload=True,
         )
+
         filtered_ds.append(windows_dataset)
 
     return filtered_ds

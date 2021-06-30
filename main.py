@@ -1,8 +1,8 @@
 import torch
-from braindecode.util import set_random_seeds
-from sampleNet import SampleNet
+#from braindecode.util import set_random_seeds
+#from sampleNet import SampleNet
 #from dataprocess import call_data, preprocess_data, create_windows_dataset
-from run_model import run_sample_model, run_shallow_net
+#from run_model import run_sample_model, run_shallow_net
 from independent_dataprocess import call_data, generate_ss_feature, generate_ss_feature_test, concat_dataset, bandpass_window_BaseConcat
 import spectralNet as sn
 import pickle
@@ -46,10 +46,10 @@ def main(args):
 
             for i in subject_list:
                 if i == CHOSEN_TEST_SUBJECT:
-                    subject_data = data_list[i]
+                    subject_data = data_list[i-1]
                     data_test.append(subject_data)
                     continue
-                subject_data = data_list[i]
+                subject_data = data_list[i-1]
                 data.append(subject_data)
 
 
@@ -90,6 +90,8 @@ def main(args):
             break
 
 
+    device = 'cpu' if args.cpu else 'gpu'
+
     # Running spectral-spatial net
     final_result_string = ""
     for subject in subject_list:
@@ -117,7 +119,7 @@ def main(args):
 
         trainloader = sn.numpy_to_trainloader(X_train,Y,batch_size)
         testloader = sn.numpy_to_trainloader(X_test, Y_test, batch_size)
-        result_string = sn.train_and_test(trainloader, epoch, testloader, num_classes=2)
+        result_string = sn.train_and_test(trainloader, epoch, testloader, num_classes=2, device = device)
         print("FINISHED WITH SUBJECT {} TEST".format(CHOSEN_TEST_SUBJECT))
         final_result_string += "SUBJECT {} TEST\n".format(CHOSEN_TEST_SUBJECT)
         final_result_string += result_string
@@ -134,7 +136,7 @@ if __name__ == '__main__':
     parser.add_argument("--refresh_feature", type=strtobool, default="false")
     parser.add_argument("--batch_size", type=int, default=100)
     parser.add_argument("--epoch", type=int, default=150)
-
+    parser.add_argument("--cpu", type=strtobool, default="false") # if true: forces to use cpu
     args = parser.parse_args()
 
     main(args)
