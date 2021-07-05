@@ -1,4 +1,5 @@
 import numpy as np
+from color import color
 import torch
 from torch import nn, cat
 from torch.nn import init
@@ -72,6 +73,106 @@ def numpy_to_trainloader(X,Y, batch_size, num_workers = 2, shuffle = False):
                                                num_workers=num_workers)
     return train_loader
 
+
+'''
+still working on model_train function.
+'''
+def model_train(model, train_loader, optimizer, loss_function, epochs = 150, valid_loader = None, lr = 0.01, weight_decay = 0.5*0.001, PATH = './independent_model.pth', device = 'gpu'):
+    use_cuda = torch.cuda.is_available()
+    if device == 'gpu':
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+    optimizer = optimizer(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    loss_function.to(device)
+    model.to(device)
+
+
+    train_acc_list, valid_acc_list, train_loss_list, valid_loss_list = [], [], [], []
+
+
+    print("Epoch\tTrain loss\ttrain_accuracy\tValid loss\tvalid_accuracy")
+    for epoch in range(epochs):
+        train_loss = 0.0
+        train_acc = 0
+        total, num_correct = 0, 0  # for accuracy computation
+        for batch, data in enumerate(train_loader, 0):
+            model.train()
+
+            inputs, labels = data
+
+            # to either cpu or cuda
+            inputs, labels = inputs.to(device), labels.to(device=device, dtype=torch.int64)
+
+            # splits the tensor suitable for model input
+            model_input = torch.split(inputs, 1, dim=1)
+
+            # convert to list
+            model_input = list(model_input)
+
+            optimizer.zero_grad()
+
+            # LOSS FUNCTION
+            outputs = model(model_input)
+            loss = loss_function(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            train_loss += outputs.shape[0] * loss.item()
+
+            # Compute accuracy
+
+            outputs = model(model_input)
+
+            _, predicted = torch.max(outputs.data, 1)
+
+            total += labels.size(0)
+            num_correct += (predicted == labels).sum().item()
+
+        valid_total, valid_correct = 0, 0
+        valid_acc = 0
+        valid_loss = 0.0
+        for batch, data in enumerate(valid_loader, 0):
+            inputs, labels = data
+
+            # to either cpu or cuda
+            inputs, labels = inputs.to(device), labels.to(device=device, dtype=torch.int64)
+
+            # splits the tensor suitable for model input
+            model_input = torch.split(inputs, 1, dim=1)
+
+            # convert to list
+            model_input = list(model_input)
+
+            outputs = model(model_input)
+            loss = loss_function(outputs, labels)
+            valid_loss += outputs.shape[0] * loss.item()
+
+            _, predicted = torch.max(outputs.data, 1)
+
+            valid_total += labels.size(0)
+            valid_correct += (predicted == labels).sum().item()
+
+        train_acc = (num_correct / total) * 100
+        valid_acc = (valid_correct / valid_total) * 100
+
+        # elements to print
+        train_loss_print = round(train_loss, 2) if (
+                    len(train_loss_list) > 0 and train_loss >= min(train_loss_list)) else (color.GREEN + str(round(train_loss,2)) + color.END)# colored(round(train_loss, 2),'green')
+        train_acc_print = round(train_acc, 2) if (
+                    len(train_acc_list) > 0 and train_acc <= max(train_acc_list)) else (color.RED + str(round(train_acc,2)) + color.END)
+        valid_loss_print = round(valid_loss, 2) if (
+                    len(valid_loss_list) > 0 and valid_loss >= min(valid_loss_list)) else (color.BLUE + str(round(valid_loss,2)) + color.END)
+        valid_acc_print = round(valid_acc, 2) if (
+                    len(valid_acc_list) > 0 and valid_acc <= max(valid_acc_list)) else (color.CYAN + str(round(valid_acc,2)) + color.END)
+
+        train_acc_list.append(train_acc)
+        valid_acc_list.append(valid_acc)
+        train_loss_list.append(train_loss)
+        valid_loss_list.append(valid_loss)
+
+        print("{}\t{}\t\t{}%\t\t{}\t\t{}%".format(epoch, train_loss_print, train_acc_print, valid_loss_print,
+                                                  valid_acc_print))
 
 
 def train(epochs, train_loader, model, optimizer, loss_function, PATH = './independent_model.pth', device = 'gpu'):

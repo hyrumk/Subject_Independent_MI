@@ -1,6 +1,7 @@
 from braindecode.datasets import MOABBDataset
 from braindecode.datautil.preprocess import exponential_moving_standardize
-from braindecode.datautil.preprocess import MNEPreproc, NumpyPreproc, preprocess
+from braindecode.datautil.preprocess import (
+    exponential_moving_standardize, preprocess, Preprocessor)
 import copy
 import numpy as np
 from mne.decoding import CSP
@@ -44,16 +45,13 @@ def bandpass_data(datasets, filter_range, window_start_offset = 1.0, window_end_
     init_block_size = 1000
 
     preprocessors = [
-        # keep only EEG sensors
-        MNEPreproc(fn='pick_types', eeg=True, meg=False, stim=False),
-        # convert from volt to microvolt, directly modifying the numpy array
-        NumpyPreproc(fn=lambda x: x * 1e6),
-        # bandpass filter
-        MNEPreproc(fn='filter', l_freq=low_cut_hz, h_freq=high_cut_hz),
-        # exponential moving standardization
-        NumpyPreproc(fn=exponential_moving_standardize, factor_new=factor_new,
-                     init_block_size=init_block_size)
+        Preprocessor('pick_types', eeg=True, meg=False, stim=False),  # Keep EEG sensors
+        Preprocessor(lambda x: x * 1e6),  # Convert from V to uV
+        Preprocessor('filter', l_freq=low_cut_hz, h_freq=high_cut_hz),  # Bandpass filter
+        Preprocessor(exponential_moving_standardize,  # Exponential moving standardization
+                  factor_new=factor_new, init_block_size=init_block_size)
     ]
+
 
     filtered_ds = []
     # apply bandpass filter for each subject
